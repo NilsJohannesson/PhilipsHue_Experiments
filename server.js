@@ -1,6 +1,8 @@
 const axios = require('axios');
 
-var selectedLight = 5;
+const selectedLight = 5;
+const lightsAmount = 5;
+const flickerSpeed = 1000;
 
 var lightOn = true;
 const url = 'http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5'
@@ -22,22 +24,33 @@ function getOriginalState(){
             const { on, bri, hue, sat, effect } = result.data.state;
             originalState = { on, bri, hue, sat, effect };
 
-            console.log("RETURNING TO ORIGINAL STATE")
-            console.log(originalState);
+            //console.log(originalState);
         })
         .catch(error => {
             console.log(error);
         });
 }
 
-function putRequest(payload){
-    axios.put(url + '/lights/' + selectedLight + '/state', payload)
+function putRequest(lightNr, payload){
+    axios.put(url + '/lights/' + lightNr + '/state', payload)
     .then(result => {
-        console.log(result.data);
+        //console.log(result.data);
     })
     .catch(error => {
         console.log(error);
     });
+}
+
+function toOriginalState(){
+    axios.put(url + '/lights/5/state', originalState)
+        .then(result => {
+            //console.log(result.data);
+            console.log("Turned light back on");
+            exitProgram();
+        })
+        .catch(error => {
+            console.log(error);
+        });
 }
 
 function quitProgram(){
@@ -62,19 +75,6 @@ function exitProgram(){
     process.exit();
 }
 
-function toOriginalState(){
-    axios.put(url + '/lights/5/state', originalState)
-        .then(result => {
-            console.log(result.data);
-            exitProgram();
-        })
-        .catch(error => {
-            console.log(error);
-        });
-        console.log("Turned light back on");
-        
-        
-}
 
 function flickerLight(){
     // Toggle the value of lightOn
@@ -83,9 +83,11 @@ function flickerLight(){
     // Update payload2 with the current value of lightOn
     payload2 = {"on": lightOn};
 
-    putRequest(payload2);
+    for(var i = 1; i <= lightsAmount; i++){
+        putRequest(i, payload2);
+    }
 
-    console.log(lightOn);
+    //console.log(lightOn);
     
 }
 
@@ -112,9 +114,18 @@ function changeColor(){
 }
     
 //PROGRAM STARTS HERE
+
+//this all needs to be inside a for loop for all lights
+for(var i = 1; i <= lightsAmount; i++){
+    getOriginalState();
+    changeColor();
+}
+
 getOriginalState();
+
 changeColor();
-const intervalId = setInterval(flickerLight, 1000);
+
+const intervalId = setInterval(flickerLight, flickerSpeed);
 
 quitProgram();
 
