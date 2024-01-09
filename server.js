@@ -8,26 +8,52 @@ const red = "#D81B2E";
 const green = "#88DC1B";
 const blue = "#103DDF";
 
+const exitMessage = `
+▄▄▄ .▐▄• ▄ ▪  ▄▄▄▄▄▪   ▐ ▄  ▄▄ •      ▄▄▄·▄▄▄         ▄▄ • ▄▄▄   ▄▄▄· • ▌ ▄ ·. 
+▀▄.▀· █▌█▌▪██ •██  ██ •█▌▐█▐█ ▀ ▪    ▐█ ▄█▀▄ █·▪     ▐█ ▀ ▪▀▄ █·▐█ ▀█ ·██ ▐███▪
+▐▀▀▪▄ ·██· ▐█· ▐█.▪▐█·▐█▐▐▌▄█ ▀█▄     ██▀·▐▀▀▄  ▄█▀▄ ▄█ ▀█▄▐▀▀▄ ▄█▀▀█ ▐█ ▌▐▌▐█·
+▐█▄▄▌▪▐█·█▌▐█▌ ▐█▌·▐█▌██▐█▌▐█▄▪▐█    ▐█▪·•▐█•█▌▐█▌.▐▌▐█▄▪▐█▐█•█▌▐█ ▪▐▌██ ██▌▐█▌
+ ▀▀▀ •▀▀ ▀▀▀▀▀ ▀▀▀ ▀▀▀▀▀ █▪·▀▀▀▀     .▀   .▀  ▀ ▀█▄▀▪·▀▀▀▀ .▀  ▀ ▀  ▀ ▀▀  █▪▀▀▀
+`;
 
 var lightOn = true;
 const url = 'http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5'
 var originalState = '';
-
-var payload2 = {};
-
 var originalStates = [];
+var payload2 = {};
+var requestsFinished = 0;
+
+
 
 
 function getOriginalState(lightNr){
-    axios.get('http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5/lights/' + lightNr)
+    let includesHue = false;
+
+    axios.get(url + '/lights/' + lightNr)
         .then(result => {
             //resulting json is already a javascript object and does not need to be JSON.Parse'd 
             //extract only necessary parameters
-            const { on, bri, hue, sat, effect } = result.data.state;
-            originalState = { on, bri, hue, sat, effect };
-            originalStates.push(originalState);
+            const { on, bri, ct, hue, sat, effect } = result.data.state;
+            originalState = { on, bri, ct, hue, sat, effect };
 
-            //console.log(originalState);
+            //filter out undefined entries
+            const originalStateFiltered1 = Object.entries(originalState).filter(([key, value]) => value !== undefined);
+
+            //convert it back to JSON and check if hue exists
+            let originalStateFiltered2 = Object.fromEntries(originalStateFiltered1);
+            if('hue' in originalStateFiltered2){
+                includesHue = true;
+            }
+
+            // if hue is in the json > convert to Objects > remove ct > convert back to JSON
+            if(includesHue){
+                originalStateFiltered2 = Object.entries(originalStateFiltered2).filter(([key, value]) => key !== 'ct');
+                originalStates.push( Object.fromEntries(originalStateFiltered2));
+            }
+            // if not, do not convert
+            else{
+                originalStates.push(originalStateFiltered2);
+            }
         })
         .catch(error => {
             console.log(error);
@@ -44,16 +70,34 @@ function putRequest(lightNr, payload){
     });
 }
 
-function toOriginalState(lightNr){
-    axios.put(url + '/lights/' + lightNr + '/state', originalStates[lightNr-1])
+async function toOriginalState(lightNr){
+   return axios.put(url + '/lights/' + lightNr + '/state', originalStates[lightNr-1])
         .then(result => {
             //console.log(result.data);
             console.log("Turned light nr. " + lightNr + " back on");
-            exitProgram();
+            return result.data;
+  
         })
         .catch(error => {
             console.log(error);
+            throw error;
         });
+}
+
+async function allLightsToOriginalState(callback){
+    const promises = [];
+
+    for(var i = 1; i <= lightsAmount; i++) {
+        promises.push(toOriginalState(i));
+    }
+
+    try {
+        const results = await Promise.all(promises);
+        console.log("ALL " + results.length + " LIGHTS TURNED ON");
+        callback();
+    } catch (error) {
+        console.log("An error occurred: ", error);
+    }
 }
 
 function quitProgram(){
@@ -68,10 +112,10 @@ function quitProgram(){
         // Stop the interval, return to original state and exit the program
         clearInterval(intervalId);
 
-        for(var i = 1; i <= lightsAmount; i++){
-            toOriginalState(i);
-        }
-        
+        allLightsToOriginalState(() => {
+            exitProgram();
+        })
+        //allLightsToOriginalState(exitProgram);
     }
     });
 
@@ -79,6 +123,7 @@ function quitProgram(){
 }
 
 function exitProgram(){
+    console.log(exitMessage);
     process.exit();
 }
 
@@ -219,16 +264,17 @@ function changeColor(lightNr){
         });
     }
     });
-
-    console.log('Press "R, G or B" to change the color!');
 }
     
-// _____  _____   ____   _____ _____            __  __    _____ _______       _____ _______ _____   _    _ ______ _____  ______ 
-// |  __ \|  __ \ / __ \ / ____|  __ \     /\   |  \/  |  / ____|__   __|/\   |  __ \__   __/ ____| | |  | |  ____|  __ \|  ____|
-// | |__) | |__) | |  | | |  __| |__) |   /  \  | \  / | | (___    | |  /  \  | |__) | | | | (___   | |__| | |__  | |__) | |__   
-// |  ___/|  _  /| |  | | | |_ |  _  /   / /\ \ | |\/| |  \___ \   | | / /\ \ |  _  /  | |  \___ \  |  __  |  __| |  _  /|  __|  
-// | |    | | \ \| |__| | |__| | | \ \  / ____ \| |  | |  ____) |  | |/ ____ \| | \ \  | |  ____) | | |  | | |____| | \ \| |____ 
-// |_|    |_|  \_\\____/ \_____|_|  \_\/_/    \_\_|  |_| |_____/   |_/_/    \_\_|  \_\ |_| |_____/  |_|  |_|______|_|  \_\______|                                                                                                             
+
+// ██████  ██████   ██████   ██████  ██████   █████  ███    ███     ███████ ████████  █████  ██████  ████████ ███████     ██   ██ ███████ ██████  ███████ 
+// ██   ██ ██   ██ ██    ██ ██       ██   ██ ██   ██ ████  ████     ██         ██    ██   ██ ██   ██    ██    ██          ██   ██ ██      ██   ██ ██      
+// ██████  ██████  ██    ██ ██   ███ ██████  ███████ ██ ████ ██     ███████    ██    ███████ ██████     ██    ███████     ███████ █████   ██████  █████   
+// ██      ██   ██ ██    ██ ██    ██ ██   ██ ██   ██ ██  ██  ██          ██    ██    ██   ██ ██   ██    ██         ██     ██   ██ ██      ██   ██ ██      
+// ██      ██   ██  ██████   ██████  ██   ██ ██   ██ ██      ██     ███████    ██    ██   ██ ██   ██    ██    ███████     ██   ██ ███████ ██   ██ ███████ 
+
+
+console.log('Press "R, G or B" to change the color!');
 
 for(var i = 1; i <= lightsAmount; i++){
     getOriginalState(i);
@@ -238,6 +284,13 @@ for(var i = 1; i <= lightsAmount; i++){
 const intervalId = setInterval(flickerLight, flickerSpeed);
 
 quitProgram();
+
+
+// //debug
+// for(var i = 1; i <= lightsAmount; i++){
+//     getOriginalState(i);
+// }
+// setTimeout(function () {console.log(originalStates)}, 2000);
 
 
 
