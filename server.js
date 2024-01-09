@@ -3,6 +3,12 @@ const axios = require('axios');
 const selectedLight = 5;
 const lightsAmount = 5;
 const flickerSpeed = 1000;
+const animateSpeed = 500;
+const colorLoopSpeed = 10000;
+const colorLoopUpdateSpeed = 500;
+const offset = 500;
+const booleanArray = [false, false, false, false, false];
+const lightsOrder = [4, 5, 2, 3, 1];
 
 const red = "#D81B2E";
 const green = "#88DC1B";
@@ -22,7 +28,15 @@ var originalState = '';
 var originalStates = [];
 var payload2 = {};
 var requestsFinished = 0;
+const intervalId = null;
 
+
+
+// ███████ ██    ██ ███    ██  ██████ ████████ ██  ██████  ███    ██ ███████ 
+// ██      ██    ██ ████   ██ ██         ██    ██ ██    ██ ████   ██ ██      
+// █████   ██    ██ ██ ██  ██ ██         ██    ██ ██    ██ ██ ██  ██ ███████ 
+// ██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██ 
+// ██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████ 
 
 
 
@@ -63,6 +77,16 @@ function getOriginalState(lightNr){
 function putRequest(lightNr, payload){
     axios.put(url + '/lights/' + lightNr + '/state', payload)
     .then(result => {
+        
+        // TO-DO
+        // Many times hue api responds with custom error messages,
+        // these are also json objects and are of key "error".
+        // write a check for this error message and force throw new error
+
+        // if (result.data.includes('error')) {
+        //     console.log("YOOOOOOOOOOOOOOO");
+        //     throw new Error('Server returned an error');
+        // }
         //console.log(result.data);
     })
     .catch(error => {
@@ -110,7 +134,10 @@ function quitProgram(){
     // Check if the pressed key is 'q'
     if (key === 'q') {
         // Stop the interval, return to original state and exit the program
-        clearInterval(intervalId);
+        if(intervalId != null){
+            clearInterval(intervalId);
+        }
+        
 
         allLightsToOriginalState(() => {
             exitProgram();
@@ -127,6 +154,11 @@ function exitProgram(){
     process.exit();
 }
 
+function lightsOff(){
+    for(var i = 1; i <= lightsAmount; i++){
+        putRequest(i + 1, {"on": false});
+    }
+}
 
 function flickerLight(){
     // Toggle the value of lightOn
@@ -144,6 +176,51 @@ function flickerLight(){
     //console.log(lightOn);
     
 }
+
+function loopColors(){
+    for(var i = 1; i <= lightsAmount; i++){
+        putRequest(i + 1, {"effect": "colorloop"});
+    }
+}
+
+function customColorLoop(index){
+    const currentTime = new Date();
+    const elapsedTime = currentTime - startTime;
+    setTimeout(() => {
+        booleanArray[index] = !booleanArray[index];
+
+        const newHue = (Math.round(remap((elapsedTime % colorLoopSpeed), 0, colorLoopSpeed, 0, 65025)));
+        let payload = {"hue": newHue};
+
+        console.log(lightsOrder[index]);
+        putRequest(lightsOrder[index], payload);
+
+        customColorLoop((index + 1) % 2);
+
+        //console.log(elapsedTime + "  < Elapsed time & Hue value >  " + newHue);
+        
+    }, colorLoopUpdateSpeed);
+}
+
+function animateLights(index) {
+
+    setTimeout(() => {
+        booleanArray[index] = !booleanArray[index];
+        let payload = {"on": (booleanArray[index])};
+        putRequest(lightsOrder[index], payload);
+    
+        setTimeout(() => {
+            booleanArray[index] = !booleanArray[index];
+
+            let payload = {"on": (booleanArray[index])};
+            putRequest(lightsOrder[index], payload);
+        },offset);
+    
+        animateLights((index + 1) % booleanArray.length);
+    }, animateSpeed);
+  }
+
+  
 
 function convertHslToPh(hue){
     //calculate percentage
@@ -204,7 +281,7 @@ function hexToHsl(hex) {
     l = Math.round(l * 100);
   
     return { h, s, l };
-  }
+}
 
   function remap(value, fromLow, fromHigh, toLow, toHigh) {
     // Ensure the value is within the original range
@@ -217,7 +294,7 @@ function hexToHsl(hex) {
     const newValue = percentage * (toHigh - toLow) + toLow;
   
     return newValue;
-  }
+}
 
 function changeColor(lightNr){
     // Listen for key events on stdin
@@ -281,7 +358,13 @@ for(var i = 1; i <= lightsAmount; i++){
     changeColor(i);
 }
 
-const intervalId = setInterval(flickerLight, flickerSpeed);
+const startTime = new Date();
+
+lightsOff();
+animateLights(0);
+
+//customColorLoop(0);
+//intervalId = setInterval(flickerLight, flickerSpeed);
 
 quitProgram();
 
