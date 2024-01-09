@@ -12,23 +12,20 @@ const blue = "#103DDF";
 var lightOn = true;
 const url = 'http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5'
 var originalState = '';
-var payload1 = {
-    "on": false,
-    "bri": 255,
-    "hue": 45046,
-    "sat": 250,
-    "effect": "none"
-    }
-var payload2 = {"on": lightOn}
+
+var payload2 = {};
+
+var originalStates = [];
 
 
-function getOriginalState(){
-    axios.get('http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5/lights/' + selectedLight)
+function getOriginalState(lightNr){
+    axios.get('http://192.168.1.156/api/g7xwFaHHCPBqPYhM2fYWdnEnIZYvw6AjRQotNFc5/lights/' + lightNr)
         .then(result => {
             //resulting json is already a javascript object and does not need to be JSON.Parse'd 
             //extract only necessary parameters
             const { on, bri, hue, sat, effect } = result.data.state;
             originalState = { on, bri, hue, sat, effect };
+            originalStates.push(originalState);
 
             //console.log(originalState);
         })
@@ -47,11 +44,11 @@ function putRequest(lightNr, payload){
     });
 }
 
-function toOriginalState(){
-    axios.put(url + '/lights/5/state', originalState)
+function toOriginalState(lightNr){
+    axios.put(url + '/lights/' + lightNr + '/state', originalStates[lightNr-1])
         .then(result => {
             //console.log(result.data);
-            console.log("Turned light back on");
+            console.log("Turned light nr. " + lightNr + " back on");
             exitProgram();
         })
         .catch(error => {
@@ -70,7 +67,11 @@ function quitProgram(){
     if (key === 'q') {
         // Stop the interval, return to original state and exit the program
         clearInterval(intervalId);
-        toOriginalState();
+
+        for(var i = 1; i <= lightsAmount; i++){
+            toOriginalState(i);
+        }
+        
     }
     });
 
@@ -89,10 +90,11 @@ function flickerLight(){
     // Update payload2 with the current value of lightOn
     payload2 = {"on": lightOn};
 
-    // for(var i = 1; i <= lightsAmount; i++){
-    //     putRequest(i, payload2);
-    // }
-    putRequest(5, payload2);
+    for(var i = 1; i <= lightsAmount; i++){
+        putRequest(i, payload2);
+    }
+
+    //putRequest(5, payload2);
 
     //console.log(lightOn);
     
@@ -172,7 +174,7 @@ function hexToHsl(hex) {
     return newValue;
   }
 
-function changeColor(){
+function changeColor(lightNr){
     // Listen for key events on stdin
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -186,7 +188,7 @@ function changeColor(){
         r.s = Math.round(remap(r.s, 0, 100, 0, 255));
         r.l = Math.round(remap(r.l, 0, 100, 0, 255));
         //console.log(r.s);
-        putRequest(5, {
+        putRequest(lightNr, {
             "bri": r.l,
             "hue": r.h,
             "sat": r.s,
@@ -198,7 +200,7 @@ function changeColor(){
         g.s = Math.round(remap(g.s, 0, 100, 0, 255));
         g.l = Math.round(remap(g.l, 0, 100, 0, 255));
         //console.log(g.s);
-        putRequest(5, {
+        putRequest(lightNr, {
             "bri": g.l,
             "hue": g.h,
             "sat": g.s,
@@ -210,7 +212,7 @@ function changeColor(){
         b.s = Math.round(remap(b.s, 0, 100, 0, 255));
         b.l = Math.round(remap(b.l, 0, 100, 0, 255));
         //console.log(b.s);
-        putRequest(5, {
+        putRequest(lightNr, {
             "bri": b.l,
             "hue": b.h,
             "sat": b.s,
@@ -221,19 +223,19 @@ function changeColor(){
     console.log('Press "R, G or B" to change the color!');
 }
     
-//PROGRAM STARTS HERE
+// _____  _____   ____   _____ _____            __  __    _____ _______       _____ _______ _____   _    _ ______ _____  ______ 
+// |  __ \|  __ \ / __ \ / ____|  __ \     /\   |  \/  |  / ____|__   __|/\   |  __ \__   __/ ____| | |  | |  ____|  __ \|  ____|
+// | |__) | |__) | |  | | |  __| |__) |   /  \  | \  / | | (___    | |  /  \  | |__) | | | | (___   | |__| | |__  | |__) | |__   
+// |  ___/|  _  /| |  | | | |_ |  _  /   / /\ \ | |\/| |  \___ \   | | / /\ \ |  _  /  | |  \___ \  |  __  |  __| |  _  /|  __|  
+// | |    | | \ \| |__| | |__| | | \ \  / ____ \| |  | |  ____) |  | |/ ____ \| | \ \  | |  ____) | | |  | | |____| | \ \| |____ 
+// |_|    |_|  \_\\____/ \_____|_|  \_\/_/    \_\_|  |_| |_____/   |_/_/    \_\_|  \_\ |_| |_____/  |_|  |_|______|_|  \_\______|                                                                                                             
 
-//this all needs to be inside a for loop for all lights
-// for(var i = 1; i <= lightsAmount; i++){
-//     getOriginalState();
-//     changeColor();
-// }
-
-getOriginalState();
+for(var i = 1; i <= lightsAmount; i++){
+    getOriginalState(i);
+    changeColor(i);
+}
 
 const intervalId = setInterval(flickerLight, flickerSpeed);
-
-changeColor();
 
 quitProgram();
 
